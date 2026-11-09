@@ -1,7 +1,33 @@
-import type { Lead, LeadDraft, Stage } from './types';
+import type { Lead, LeadDraft, Source, Stage } from './types';
 
 const storageKey = 'leads-tracker:v1';
 type StoredLeads = { version: 1; leads: Lead[] };
+
+export type LeadQuery = {
+  search?: string;
+  stage?: Stage;
+  source?: Source;
+  sort?: 'nextFollowUpDate' | 'estimatedValue' | 'updatedAt';
+};
+
+export function queryLeads(leads: Lead[], query: LeadQuery = {}): Lead[] {
+  const search = query.search?.trim().toLocaleLowerCase() ?? '';
+  const filtered = leads.filter((lead) => {
+    const matchesSearch = !search || lead.name.toLocaleLowerCase().includes(search) || lead.company?.toLocaleLowerCase().includes(search);
+    return matchesSearch && (!query.stage || lead.stage === query.stage) && (!query.source || lead.source === query.source);
+  });
+
+  if (!query.sort) return filtered;
+  return [...filtered].sort((left, right) => {
+    if (query.sort === 'nextFollowUpDate') {
+      if (!left.nextFollowUpDate) return right.nextFollowUpDate ? 1 : 0;
+      if (!right.nextFollowUpDate) return -1;
+      return left.nextFollowUpDate.localeCompare(right.nextFollowUpDate);
+    }
+    if (query.sort === 'estimatedValue') return right.estimatedValue - left.estimatedValue;
+    return right.updatedAt.localeCompare(left.updatedAt);
+  });
+}
 
 export function validateDraft(draft: LeadDraft): Record<string, string> {
   const errors: Record<string, string> = {};
