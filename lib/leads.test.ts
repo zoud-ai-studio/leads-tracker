@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createLead, getLeads, queryLeads, saveLead, updateLeadStage } from './leads';
+import { addActivity, createLead, deleteLead, getLeads, queryLeads, saveLead, updateLeadStage } from './leads';
 import type { Lead } from './types';
 
 const lead = (overrides: Partial<Lead>): Lead => ({
@@ -48,6 +48,29 @@ describe('lead repository', () => {
 
     expect(getLeads()[0]).toMatchObject({ stage: 'Won', wonAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
     expect(JSON.parse(localStorage.getItem('leads-tracker:v1') ?? '').leads[0].stage).toBe('Won');
+  });
+
+  it('adds activities using the local calendar date and orders tied entries newest first', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 3, 15, 1, 0));
+    const item = createLead({ name: 'Ada', estimatedValue: '', source: 'Website', service: 'Website', stage: 'New' });
+    saveLead(item);
+    addActivity(item.id, 'First note');
+    vi.setSystemTime(new Date(2026, 3, 15, 1, 1));
+    addActivity(item.id, 'Second note');
+
+    expect(getLeads()[0].activities.map((activity) => activity.body)).toEqual(['Second note', 'First note']);
+    expect(getLeads()[0].activities[0].occurredOn).toBe('2026-04-15');
+    vi.useRealTimers();
+  });
+
+  it('deletes a lead and all of its activities', () => {
+    const item = lead({ id: 'delete-me', activities: [{ id: 'activity', body: 'Remove me', occurredOn: '2026-04-15', createdAt: '2026-04-15T01:00:00.000Z' }] });
+    saveLead(item);
+
+    deleteLead(item.id);
+
+    expect(getLeads()).toEqual([]);
   });
 
   it('does not read browser storage during module import', async () => {

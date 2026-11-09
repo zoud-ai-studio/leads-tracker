@@ -18,10 +18,17 @@ export type Lead = {
   stage: Stage;
   nextFollowUpDate?: string;
   notes?: string;
-  activities: [];
+  activities: Activity[];
   createdAt: string;
   updatedAt: string;
   wonAt?: string;
+};
+
+export type Activity = {
+  id: string;
+  body: string;
+  occurredOn: string;
+  createdAt: string;
 };
 
 export type LeadDraft = Omit<Lead, 'id' | 'activities' | 'createdAt' | 'updatedAt' | 'wonAt' | 'estimatedValue'> & { estimatedValue: string };
