@@ -22,4 +22,29 @@ describe('LeadForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save lead' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: 'Ada', estimatedValue: '10000000' }));
   });
+
+  it('shows the required-name error after a populated name is cleared', () => {
+    render(<LeadForm onSave={vi.fn()} />);
+    const name = screen.getByLabelText('Name');
+    fireEvent.change(name, { target: { value: 'Ada' } });
+    fireEvent.change(name, { target: { value: '' } });
+    fireEvent.blur(name);
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save lead' })).toBeDisabled();
+  });
+
+  it('submits every source and service option unchanged', () => {
+    const onSave = vi.fn();
+    render(<LeadForm onSave={onSave} />);
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Ada' } });
+    for (const source of ['Website', 'Referral', 'LinkedIn', 'WhatsApp', 'Other']) {
+      for (const service of ['Website', 'Web app', 'AI agent', 'Other']) {
+        fireEvent.change(screen.getByLabelText('Source'), { target: { value: source } });
+        fireEvent.change(screen.getByLabelText('Service'), { target: { value: service } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save lead' }));
+      }
+    }
+    expect(onSave).toHaveBeenCalledTimes(20);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ source: 'Other', service: 'Other' }));
+  });
 });
