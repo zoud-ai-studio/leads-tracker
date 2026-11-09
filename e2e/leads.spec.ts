@@ -23,12 +23,24 @@ test('form is usable at mobile and desktop widths', async ({ page }) => {
   }
 });
 
+test('discarding an unsaved form leaves a fresh form empty on return', async ({ page }) => {
+  await page.goto('/leads/new');
+  await page.getByLabel('Name').fill('Unsaved Ada');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('link', { name: 'Cancel' }).click();
+  await expect(page).toHaveURL('/');
+  await page.getByRole('link', { name: 'Add lead' }).first().click();
+  await expect(page.getByLabel('Name')).toHaveValue('');
+});
+
 test('board orders stages, moves a lead, and persists the move after reload', async ({ page }) => {
   await page.addInitScript(() => {
-    localStorage.setItem('leads-tracker:v1', JSON.stringify({ version: 1, leads: [{
-      id: 'ada', name: 'Ada Lovelace', company: 'Analytical Engines', source: 'Website', service: 'AI agent',
-      estimatedValue: 12500, stage: 'New', activities: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
-    }] }));
+    if (!localStorage.getItem('leads-tracker:v1')) {
+      localStorage.setItem('leads-tracker:v1', JSON.stringify({ version: 1, leads: [{
+        id: 'ada', name: 'Ada Lovelace', company: 'Analytical Engines', source: 'Website', service: 'AI agent',
+        estimatedValue: 12500, stage: 'New', activities: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z'
+      }] }));
+    }
   });
   await page.goto('/board');
 
@@ -42,6 +54,11 @@ test('board orders stages, moves a lead, and persists the move after reload', as
   await page.reload();
   await expect(page.locator('.board-column').filter({ has: page.getByRole('heading', { name: 'Won' }) }).getByText('Ada Lovelace')).toBeVisible();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('leads-tracker:v1') ?? '{}').leads[0].stage)).toBe('Won');
+
+  await page.getByRole('button', { name: 'Move to' }).click();
+  await page.getByLabel('Move to').selectOption('New');
+  await expect(page.locator('.board-column').filter({ has: page.getByRole('heading', { name: 'New' }) }).getByText('Ada Lovelace')).toBeVisible();
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('leads-tracker:v1') ?? '{}').leads[0].wonAt)).toBeUndefined();
 });
 
 test('board shows all empty columns without horizontal scrolling at mobile and desktop widths', async ({ page }) => {
@@ -69,7 +86,7 @@ test('list searches, filters, sorts, and reports no results', async ({ page }) =
   await page.getByLabel('Stage').selectOption('Won');
   await page.getByLabel('Source').selectOption('LinkedIn');
   await expect(page.getByRole('row', { name: /John Smith/ })).toBeVisible();
-  await page.getByRole('columnheader', { name: 'Estimated value' }).click();
+  await page.getByRole('button', { name: 'Estimated value' }).click();
   await expect(page.getByRole('row').nth(1)).toContainText('John Smith');
   await page.getByLabel('Search leads').fill('no match');
   await expect(page.getByText('No leads found')).toBeVisible();
@@ -82,7 +99,7 @@ test('list fits at mobile and shows all columns at desktop widths', async ({ pag
     await expect(page.getByRole('table')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
-  await expect(page.getByRole('columnheader', { name: 'Last updated' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Last updated' })).toBeVisible();
 });
 
 test('detail page adds activities and deletes the lead after confirmation', async ({ page }) => {
@@ -99,7 +116,7 @@ test('detail page adds activities and deletes the lead after confirmation', asyn
   await page.getByRole('button', { name: 'Delete' }).first().click();
   await expect(page.getByRole('dialog')).toContainText('Are you sure you want to delete this lead? This action cannot be undone.');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByText('Ada Lovelace')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
   await page.getByRole('button', { name: 'Delete' }).first().click();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
   await expect(page).toHaveURL('/');
