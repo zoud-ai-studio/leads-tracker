@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { addActivity, createLead, deleteLead, getLeads, queryLeads, saveLead, updateLeadStage } from './leads';
+import { addActivity, createLead, deleteLead, getLeads, localDate, queryLeads, saveLead, updateLeadStage, validateDraft } from './leads';
 import type { Lead } from './types';
 
 const lead = (overrides: Partial<Lead>): Lead => ({
@@ -48,6 +48,10 @@ describe('lead repository', () => {
 
     expect(getLeads()[0]).toMatchObject({ stage: 'Won', wonAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
     expect(JSON.parse(localStorage.getItem('leads-tracker:v1') ?? '').leads[0].stage).toBe('Won');
+
+    updateLeadStage(lead.id, 'New');
+    expect(getLeads()[0]).toMatchObject({ stage: 'New' });
+    expect(getLeads()[0]).not.toHaveProperty('wonAt');
   });
 
   it('adds activities using the local calendar date and orders tied entries newest first', () => {
@@ -62,6 +66,21 @@ describe('lead repository', () => {
     expect(getLeads()[0].activities.map((activity) => activity.body)).toEqual(['Second note', 'First note']);
     expect(getLeads()[0].activities[0].occurredOn).toBe('2026-04-15');
     vi.useRealTimers();
+  });
+
+  it('keeps a 100-note activity log newest first', () => {
+    const item = lead({ id: 'many-notes' });
+    saveLead(item);
+    for (let index = 0; index < 100; index += 1) addActivity(item.id, `Note ${index}`);
+
+    const activities = getLeads()[0].activities;
+    expect(activities).toHaveLength(100);
+    expect(activities.map((activity) => activity.createdAt)).toEqual([...activities].map((activity) => activity.createdAt).sort().reverse());
+  });
+
+  it('uses the browser-local date at early and late local times', () => {
+    expect(localDate(new Date(2026, 3, 15, 1, 0))).toBe('2026-04-15');
+    expect(localDate(new Date(2026, 3, 15, 23, 59))).toBe('2026-04-15');
   });
 
   it('deletes a lead and all of its activities', () => {
@@ -103,5 +122,19 @@ describe('lead list queries', () => {
   it('sorts estimated value and last updated descending', () => {
     expect(queryLeads(leads, { sort: 'estimatedValue' }).map((item) => item.id)).toEqual(['john', 'grace', 'ada']);
     expect(queryLeads(leads, { sort: 'updatedAt' }).map((item) => item.id)).toEqual(['john', 'grace', 'ada']);
+  });
+
+  it('filters every supported source and retains undated leads at the end of follow-up sorting', () => {
+    const bySource = ['Website', 'Referral', 'LinkedIn', 'WhatsApp', 'Other'] as const;
+    const sourceLeads = bySource.map((source, index) => lead({ id: source, source, nextFollowUpDate: index === 0 ? undefined : `2026-04-0${index}` }));
+    for (const source of bySource) expect(queryLeads(sourceLeads, { source }).map((item) => item.source)).toEqual([source]);
+    expect(queryLeads(sourceLeads, { sort: 'nextFollowUpDate' }).at(-1)?.source).toBe('Website');
+  });
+
+  it('accepts boundary values and rejects a 501-character name', () => {
+    const draft = { name: 'A'.repeat(500), estimatedValue: '0.01', source: 'Website' as const, service: 'Website' as const, stage: 'New' as const };
+    expect(validateDraft(draft)).toEqual({});
+    expect(validateDraft({ ...draft, estimatedValue: '1234.50' })).toEqual({});
+    expect(validateDraft({ ...draft, name: 'A'.repeat(501) })).toMatchObject({ name: 'Name must be 500 characters or less' });
   });
 });
