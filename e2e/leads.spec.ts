@@ -52,3 +52,35 @@ test('board shows all empty columns without horizontal scrolling at mobile and d
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
 });
+
+test('list searches, filters, sorts, and reports no results', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('leads-tracker:v1', JSON.stringify({ version: 1, leads: [
+      { id: 'ada', name: 'Ada Lovelace', company: 'Acme Corp', source: 'Website', service: 'AI agent', estimatedValue: 1000, stage: 'New', nextFollowUpDate: '2026-04-20', activities: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-04-10T09:00:00.000Z' },
+      { id: 'john', name: 'John Smith', company: 'Beacon', source: 'LinkedIn', service: 'Website', estimatedValue: 5000, stage: 'Won', nextFollowUpDate: '2026-04-10', activities: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-04-12T09:00:00.000Z' }
+    ] }));
+  });
+  await page.goto('/');
+
+  await page.getByLabel('Search leads').fill('acme');
+  await expect(page.getByRole('row', { name: /Ada Lovelace/ })).toBeVisible();
+  await expect(page.getByRole('row', { name: /John Smith/ })).not.toBeVisible();
+  await page.getByLabel('Search leads').fill('');
+  await page.getByLabel('Stage').selectOption('Won');
+  await page.getByLabel('Source').selectOption('LinkedIn');
+  await expect(page.getByRole('row', { name: /John Smith/ })).toBeVisible();
+  await page.getByRole('columnheader', { name: 'Estimated value' }).click();
+  await expect(page.getByRole('row').nth(1)).toContainText('John Smith');
+  await page.getByLabel('Search leads').fill('no match');
+  await expect(page.getByText('No leads found')).toBeVisible();
+});
+
+test('list fits at mobile and shows all columns at desktop widths', async ({ page }) => {
+  for (const viewport of [{ width: 375, height: 800 }, { width: 1280, height: 800 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+    await expect(page.getByRole('table')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+  await expect(page.getByRole('columnheader', { name: 'Last updated' })).toBeVisible();
+});
