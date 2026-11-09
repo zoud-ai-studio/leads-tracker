@@ -1,4 +1,4 @@
-import type { Lead, LeadDraft } from './types';
+import type { Lead, LeadDraft, Stage } from './types';
 
 const storageKey = 'leads-tracker:v1';
 type StoredLeads = { version: 1; leads: Lead[] };
@@ -31,8 +31,30 @@ export function getLead(id: string): Lead | undefined { return getLeads().find((
 export function saveLead(lead: Lead): void {
   const leads = getLeads();
   const index = leads.findIndex((item) => item.id === lead.id);
-  if (index === -1) leads.push(lead); else leads[index] = lead;
+  const existing = leads[index];
+  const stageChanged = Boolean(existing && existing.stage !== lead.stage);
+  const persisted = existing ? {
+    ...lead,
+    updatedAt: new Date().toISOString(),
+    wonAt: stageChanged ? (lead.stage === 'Won' ? localDate() : undefined) : lead.wonAt
+  } : lead;
+  if (index === -1) leads.push(persisted); else leads[index] = persisted;
   window.localStorage.setItem(storageKey, JSON.stringify({ version: 1, leads } satisfies StoredLeads));
+}
+
+export function updateLeadStage(id: string, stage: Stage): Lead | undefined {
+  const lead = getLead(id);
+  if (!lead) return undefined;
+  const updated = { ...lead, stage };
+  saveLead(updated);
+  return getLead(id);
+}
+
+function localDate(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function createLead(draft: LeadDraft): Lead {
